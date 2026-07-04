@@ -40,28 +40,32 @@ class WorldDevicesParser:
 
 
     async def parse_first_product(self, category_url: str) -> tuple[str | None, str | None]:
-        """Поиск первого товара в категории и его названия (CSS/DevTools)"""
+        """Поиск первых 5 товаров в категории и их названий (CSS/DevTools)"""
  
         page = await self.browser.fetch_page(category_url, "div.products-block")
-        if not page: return None, None
+        if not page: 
+            return []
 
         html = await page.content()
         await page.close()
 
         dom = etree.HTML(html)
  
-        product_node = dom.xpath('//div[contains(@class, "product-thumb__caption")]//a[contains(@class, "product-thumb__name")]')
+        products_node = dom.xpath('//div[contains(@class, "product-thumb__caption")]//a[contains(@class, "product-thumb__name")]')
         
-        if product_node:
-            url = product_node[0].get('href')
-            name = product_node[0].text.strip() if product_node[0].text else "Без названия"
+        products = []
+
+        for product_node in products_node[:5]:
+            url = product_node.get('href')
+            name = product_node.text.strip() if product_node.text else "Без названия"
             
             if url and not url.startswith('http'):
                 url = TARGET_URL + url
                 
-            return url, name
+            products.append((url, name))
             
-        return None, None
+        logger.info(f"Найдено {len(products)} продуктов.")
+        return products
 
 
     async def parse_product_details(self, product_url: str, product_name: str, category_id: int):
@@ -104,20 +108,18 @@ class WorldDevicesParser:
         """Оркестрация процессов"""
         categories = await self.parse_categories()
 
-        categories = categories[:1] 
-        logger.info(f"ТЕСТ: Запускаю парсинг только для {categories[0]['name']}")
-
         for cat in categories:
             logger.info(f"Категория: {cat['name']} ---")
             cat_id = await self.db.upsert_category(cat['name'], cat['url'])
             
             await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
             
-            product_url, product_name = await self.parse_first_product(cat['url'])
-            
-            if product_url and product_name:
+            products = await self.parse_first_product(cat['url'])
+
+            if not products:
+                logger.warning(f"Нет продуктов в категории: {cat['name']}")
+                continue
+
+            for product_url, product_name in products:
                 await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
-                
                 await self.parse_product_details(product_url, product_name, cat_id)
-            else:
-                logger.warning(f"Нет продуктов в {cat['name']}")
