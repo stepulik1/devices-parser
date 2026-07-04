@@ -74,7 +74,7 @@ class WorldDevicesParser:
             return
         self.visited_urls.add(product_url)
 
-        page = await self.browser.fetch_page(product_url, "div#tab-specification")
+        page = await self.browser.fetch_page(product_url, "h1")
         if not page: return
 
         html = await page.content()
@@ -84,6 +84,10 @@ class WorldDevicesParser:
         
         product_id = await self.db.upsert_product(category_id, product_name, product_url)
         await self.db.clear_specs(product_id)
+
+        spec_tab = dom.xpath('//div[@id="tab-specification"]')
+        if not spec_tab:
+            logger.info(f"Характеристики отсутствуют для товара: {product_name}")
 
         spec_groups = dom.xpath('//div[@id="tab-specification"]//h4[@class="heading"]')
         
