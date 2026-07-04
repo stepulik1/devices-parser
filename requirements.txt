@@ -1,0 +1,4 @@
+playwright
+playwright-stealth
+aiosqlite
+lxml
